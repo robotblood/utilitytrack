@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}UtilityTrack{% endblock %}</title>
+  <style>
+    :root { --fg: #1d232b; --muted: #5f6b7a; --line: #dde2e8; --bg: #fff; --up: #b3261e; --down: #1e7a3c; --accent: #2457a6; }
+    @media (prefers-color-scheme: dark) {
+      :root { --fg: #e6e9ee; --muted: #9aa5b4; --line: #333b46; --bg: #14181d; --up: #f2827a; --down: #6fcf8f; --accent: #8db4f0; }
+    }
+    body { font: 15px/1.5 system-ui, sans-serif; color: var(--fg); background: var(--bg); margin: 0 auto; max-width: 960px; padding: 0 16px 48px; }
+    nav { display: flex; gap: 16px; padding: 16px 0; border-bottom: 1px solid var(--line); margin-bottom: 16px; }
+    nav a { color: var(--accent); text-decoration: none; font-weight: 600; }
+    a { color: var(--accent); }
+    .muted { color: var(--muted); }
+    .flag { font-size: 12px; padding: 1px 6px; border: 1px solid var(--line); border-radius: 4px; color: var(--muted); }
+    .up { color: var(--up); } .down { color: var(--down); }
+    table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+    th, td { text-align: left; padding: 4px 8px; border-bottom: 1px solid var(--line); }
+    td.num, th.num { text-align: right; }
+    .scroll { overflow-x: auto; }
+    form { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 16px; }
+    section { margin-bottom: 24px; }
+  </style>
+</head>
+<body>
+  <nav><a href="/">Rate timeline</a><a href="/income">Income by tract</a><a href="/docs">API</a></nav>
+  {% block content %}{% endblock %}
+</body>
+</html>

@@ -1,0 +1,10 @@
+[
+  {"code": "OPPD", "name": "Omaha Public Power District", "services": ["electric"], "region": "Omaha metro / 13 SE Nebraska counties", "status": "active",
+   "rate_pages": ["https://www.oppd.com/residential/rates/", "https://www.oppd.com/about/board-of-directors/"]},
+  {"code": "MUD", "name": "Metropolitan Utilities District", "services": ["water", "gas"], "region": "Omaha metro", "status": "active",
+   "rate_pages": ["https://www.mudomaha.com/"]},
+  {"code": "LES", "name": "Lincoln Electric System", "services": ["electric"], "region": "Lincoln", "status": "planned"},
+  {"code": "NPPD", "name": "Nebraska Public Power District", "services": ["electric"], "region": "Statewide wholesale + retail towns", "status": "planned"},
+  {"code": "LWS", "name": "Lincoln Water System", "services": ["water"], "region": "Lincoln", "status": "planned"},
+  {"code": "BHE-NE", "name": "Black Hills Energy (Nebraska Gas)", "services": ["gas"], "region": "Lincoln + statewide (PSC-regulated)", "status": "planned"}
+]

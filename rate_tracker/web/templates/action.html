@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}{{ a.id }} · UtilityTrack{% endblock %}
+{% block content %}
+<h1>{{ a.utility }} {{ a.service }}, effective {{ a.effective_date }}</h1>
+<p class="muted">Status: {{ a.status }}{% if a.approved_date %} · approved {{ a.approved_date }}{% endif %} · {{ a.verification.replace("_", " ") }}</p>
+{% if a.notes %}<p>{{ a.notes }}</p>{% endif %}
+<div class="scroll"><table>
+  <tr><th>Class</th><th>Metric</th><th class="num">Value</th></tr>
+  {% for c in a.changes %}<tr><td>{{ c.customer_class }}</td><td>{{ c.metric }}</td><td class="num">{{ "%+.2f"|format(c.value) }}</td></tr>{% endfor %}
+</table></div>
+<h2>Why it moved</h2>
+{% for d in drivers %}
+<section>
+  <h3 class="{{ d.direction }}">{{ "▲" if d.direction == "up" else "▼" }} {{ d.title }}</h3>
+  <p class="muted">{{ d.category }}{% if d.verification != "verified" %} · <span class="flag">needs verification</span>{% endif %}</p>
+  <ul>{% for s in d.sources %}<li><a href="{{ s }}" rel="noopener">{{ s }}</a></li>{% endfor %}</ul>
+</section>
+{% endfor %}
+<h2>Rate sources</h2>
+<ul>{% for s in a.sources %}<li><a href="{{ s }}" rel="noopener">{{ s }}</a></li>{% endfor %}</ul>
+{% endblock %}

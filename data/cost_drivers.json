@@ -1,0 +1,137 @@
+[
+  {
+    "id": "oppd-2022-infra-ami",
+    "utility": "OPPD",
+    "category": "capital_investment",
+    "direction": "up",
+    "title": "Infrastructure, AMI meters, tree trimming and added staff after five-year rate freeze",
+    "sources": ["https://fox42kptm.com/news/local/oppds-new-proposal-will-increase-residential-customers-rates"],
+    "verification": "needs_verification"
+  },
+  {
+    "id": "oppd-2023-fuel-purchased-power",
+    "utility": "OPPD",
+    "category": "fuel_purchased_power",
+    "direction": "up",
+    "title": "Higher fuel and purchased power market prices recovered through the FPPA line item (general rates held flat)",
+    "sources": ["https://oppdthewire.com/oppd-board-approves-budget-for-2023/", "https://fox42kptm.com/news/local/oppd-proposing-almost-3-bill-increase-due-to-fuel-and-purchased-power-price-increases"],
+    "verification": "verified"
+  },
+  {
+    "id": "oppd-2024-net-power-inflation",
+    "utility": "OPPD",
+    "category": "inflation_supply_chain",
+    "direction": "up",
+    "title": "Rising cost of net power, load growth, inflation and supply chain pressures",
+    "sources": ["https://oppdthewire.com/oppd-board-approves-modest-rate-increase-to-promote-reliability/"],
+    "verification": "verified"
+  },
+  {
+    "id": "oppd-2025-extreme-weather",
+    "utility": "OPPD",
+    "category": "weather",
+    "direction": "up",
+    "title": "2024 storms (incl. July 31 windstorm, largest damage in OPPD history) ~one-quarter of the 2025 increase; 1% Rate Stabilization Account recovery",
+    "sources": ["https://www.wowt.com/2024/12/20/oppd-approves-rate-increases-customers-2025/", "https://oppdthewire.com/rate-proposal-aims-to-maintain-reliability-resiliency-amid-growth/"],
+    "verification": "verified"
+  },
+  {
+    "id": "oppd-2025-tree-trimming",
+    "utility": "OPPD",
+    "category": "reliability_om",
+    "direction": "up",
+    "title": "Tree-trimming budget +$12M (to $29M) to move to ~5-year trim cycle",
+    "sources": ["https://www.publicpower.org/periodical/article/oppd-board-approves-23-billion-corporate-operating-plan-2025"],
+    "verification": "verified"
+  },
+  {
+    "id": "oppd-load-growth",
+    "utility": "OPPD",
+    "category": "load_growth",
+    "direction": "up",
+    "title": "Unprecedented electric demand growth requiring new generation and grid investment",
+    "sources": ["https://oppdthewire.com/oppd-board-approves-2026-budget-rate-proposal-to-support-reliability/"],
+    "verification": "verified"
+  },
+  {
+    "id": "oppd-2026-spp-reserve-margin",
+    "utility": "OPPD",
+    "category": "regulatory",
+    "direction": "up",
+    "title": "SPP raises planning reserve margin starting 2026 (another increase planned 2028)",
+    "sources": ["https://oppdthewire.com/oppd-board-approves-2026-budget-rate-proposal-to-support-reliability/", "https://oppd.com/media/321244/2025-12-dec-2026-final-corporate-operating-plan.pdf"],
+    "verification": "verified"
+  },
+  {
+    "id": "oppd-2026-materials",
+    "utility": "OPPD",
+    "category": "inflation_supply_chain",
+    "direction": "up",
+    "title": "Materials cost growth over five years: concrete +43%, copper +63%, steel +33% (per OPPD)",
+    "sources": ["https://www.wowt.com/2025/11/18/oppd-proposes-5-9-annual-rate-increases-through-end-decade"],
+    "verification": "verified"
+  },
+  {
+    "id": "oppd-2026-cost-cuts",
+    "utility": "OPPD",
+    "category": "cost_savings_offset",
+    "direction": "down",
+    "title": "~$60M internal cost cuts in 2025 (hiring freeze, deferred projects) avoided ~4% more increase",
+    "sources": ["https://oppd.com/news-resources/news-releases/2025/december/oppd-board-approves-2026-budget-with-63-average-rate-adjustment-and-updated-resolution-on-north-omaha-station-operations/"],
+    "verification": "verified"
+  },
+  {
+    "id": "mud-infrastructure-replacement",
+    "utility": "MUD",
+    "category": "infrastructure_replacement",
+    "direction": "up",
+    "title": "Replacement of aging gas and water mains via infrastructure fees (GIR/WIR) and commodity charges",
+    "sources": ["https://www.mudomaha.com/news/metropolitan-utilities-district-sets-2023-budget-raises-rates-to-fund-ongoing-natural-gas-and-water-infrastructure-upgrades/"],
+    "verification": "verified"
+  },
+  {
+    "id": "mud-water-main-breaks",
+    "utility": "MUD",
+    "category": "infrastructure_replacement",
+    "direction": "up",
+    "title": "Rising water main breaks (20% above normal in early 2023; 432 by Nov 2025)",
+    "sources": ["https://www.wowt.com/2023/12/06/mud-vote-potential-water-gas-rate-increases-omaha-customers", "https://flatwaterfreepress.org/nov-5-mud-reviews-2026-budget-priorities-and-infrastructure/"],
+    "verification": "verified"
+  },
+  {
+    "id": "mud-2022-gas-commodity-spike",
+    "utility": "MUD",
+    "category": "gas_commodity",
+    "direction": "up",
+    "title": "Natural gas purchase costs projected to raise 2022 gas bills up to 32% (pass-through)",
+    "sources": ["https://www.wowt.com/2022/12/08/mud-planning-water-natural-gas-rate-hikes-2023"],
+    "verification": "needs_verification"
+  },
+  {
+    "id": "mud-2024-gas-commodity-drop",
+    "utility": "MUD",
+    "category": "gas_commodity",
+    "direction": "down",
+    "title": "Declining natural gas prices more than offset 2024 gas rate increase (gas bill -13%)",
+    "sources": ["https://www.mudomaha.com/news/metropolitan-utilities-district-sets-2024-budget-projects-a-lower-overall-bill-while-continuing-investment-in-critical-infrastructure/"],
+    "verification": "verified"
+  },
+  {
+    "id": "mud-2026-gas-export-demand",
+    "utility": "MUD",
+    "category": "gas_commodity",
+    "direction": "up",
+    "title": "Natural gas prices rising on export demand (late 2025)",
+    "sources": ["https://flatwaterfreepress.org/nov-5-mud-reviews-2026-budget-priorities-and-infrastructure/"],
+    "verification": "verified"
+  },
+  {
+    "id": "mud-2026-prepaid-gas",
+    "utility": "MUD",
+    "category": "cost_savings_offset",
+    "direction": "down",
+    "title": "~68% of gas bought via prepaid agreements, expected to save $16M in 2026",
+    "sources": ["https://www.mudomaha.com/news/m-u-d-advances-water-and-gas-infrastructure-upgrades-in-2026-budget-plan/"],
+    "verification": "verified"
+  }
+]

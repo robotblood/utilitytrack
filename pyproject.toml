@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "utilitytrack"
+version = "0.1.0"
+description = "Track utility rate changes, the decisions and events behind them, and who they affect by neighborhood, demographics and household income."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = []  # core tracker and CLI stay stdlib-only
+
+[project.optional-dependencies]
+web = ["fastapi>=0.115", "jinja2>=3.1", "uvicorn[standard]>=0.30"]
+dev = ["utilitytrack[web]", "httpx>=0.27", "pytest>=8", "ruff>=0.6"]
+
+[project.scripts]
+rate-tracker = "rate_tracker.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["rate_tracker*"]
+
+[tool.setuptools.package-data]
+"rate_tracker.web" = ["templates/*.html", "static/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+ignore = ["E731"]  # store.py uses a small lambda reader

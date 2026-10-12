@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Income by tract · UtilityTrack{% endblock %}
+{% block content %}
+<h1>Household income by census tract</h1>
+{% if not income %}
+<p>No income data loaded yet. Generate it with:</p>
+<pre>export CENSUS_API_KEY=your_key
+python -m rate_tracker census-income --year 2024</pre>
+<p class="muted">Then restart the server.</p>
+{% else %}
+<p class="muted">{{ income.source }} · {{ tracts|length }} tracts · share of households in each group</p>
+<form method="get">
+  <select name="county">
+    <option value="">all counties</option>
+    {% for c in ["Douglas", "Sarpy"] %}<option{% if county == c %} selected{% endif %}>{{ c }}</option>{% endfor %}
+  </select>
+  <button type="submit">Filter</button>
+</form>
+<div class="scroll"><table>
+  <tr><th>Tract</th><th>County</th><th class="num">Households</th>
+    {% for g in income.groups %}<th class="num">{{ g.replace("_", " ") }}</th>{% endfor %}</tr>
+  {% for t in tracts %}
+  <tr><td>{{ t.geoid }}</td><td>{{ t.county }}</td><td class="num">{{ t.households }}</td>
+    {% for g in income.groups %}{% set s = t["share_" ~ g] %}<td class="num">{{ "%.0f%%"|format(s * 100) if s is not none else "–" }}</td>{% endfor %}</tr>
+  {% endfor %}
+</table></div>
+{% endif %}
+{% endblock %}
