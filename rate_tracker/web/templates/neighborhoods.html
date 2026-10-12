@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Neighborhoods · UtilityTrack{% endblock %}
+{% macro pct(v) %}{{ "%.1f%%"|format(v * 100) if v is not none else "–" }}{% endmacro %}
+{% macro money(v) %}{{ "${:,.0f}".format(v) if v is not none else "–" }}{% endmacro %}
+{% block content %}
+<h1>Who carries utility costs</h1>
+{% if not layer %}
+<p>No neighborhood data yet. Build it with:</p>
+<pre>python -m rate_tracker acs-profiles --year 2024
+python -m rate_tracker crosswalk neighborhoods --areas data/geo/neighborhoods.geojson --id-field NAME
+python -m rate_tracker rollup neighborhoods</pre>
+<p class="muted">See the README for where to get the boundary files. Then restart the server.</p>
+{% else %}
+<form method="get">
+  <select name="layer">{% for l in layers %}<option{% if l == layer %} selected{% endif %}>{{ l }}</option>{% endfor %}</select>
+  <select name="sort">
+    {% for k, label in [("burden", "energy burden"), ("renter_burden", "renter energy burden"), ("renter_share", "renter share"), ("area", "name")] %}
+    <option value="{{ k }}"{% if k == sort %} selected{% endif %}>sort by {{ label }}</option>{% endfor %}
+  </select>
+  <button type="submit">Show</button>
+</form>
+<p class="muted">Energy burden = ACS median monthly electricity + gas cost × 12 ÷ median household income.
+  Above 6% is high, above 10% severe. ACS does not split costs by tenure, so owner/renter burdens compare the same
+  cost against each group's income. Areas are built from tracts by area overlay.</p>
+<div class="scroll"><table>
+  <tr><th>{{ "Tract" if layer == "tracts" else "Area" }}</th><th class="num">Households</th><th class="num">Renters</th>
+    <th class="num">Median income</th><th class="num">Energy $/mo</th><th class="num">Burden</th>
+    <th class="num">Owner burden</th><th class="num">Renter burden</th><th class="num">Elec. in rent</th>
+    <th class="num">65+ households</th></tr>
+  {% for a in rows %}{% set b = a.burden %}
+  <tr><td>{{ a.area }}</td><td class="num">{{ "{:,.0f}".format(a.households or 0) }}</td>
+    <td class="num">{{ pct(a.renter_share) }}</td>
+    <td class="num">{{ money(a.median_income if a.median_income is defined else a.median_income_hhwavg) }}</td>
+    <td class="num">{{ money(b.monthly_energy_cost) }}</td>
+    <td class="num {{ b.energy_burden_all_level }}">{{ pct(b.energy_burden_all) }}</td>
+    <td class="num {{ b.energy_burden_owner_level }}">{{ pct(b.energy_burden_owner) }}</td>
+    <td class="num {{ b.energy_burden_renter_level }}">{{ pct(b.energy_burden_renter) }}</td>
+    <td class="num">{{ pct(b.share_electric_not_billed) }}</td>
+    <td class="num">{{ pct(((a.owner_hh_65plus or 0) + (a.renter_hh_65plus or 0)) / a.households if a.households else none) }}</td></tr>
+  {% endfor %}
+</table></div>
+{% endif %}
+{% endblock %}

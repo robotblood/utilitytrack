@@ -7,6 +7,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
+from ..bills import load_tariffs, monthly_bill, observed_burden
 from ..log import get_logger
 from ..store import DATA_DIR, Store
 
@@ -21,9 +22,28 @@ def load_income(data_dir: Path) -> dict | None:
     return json.loads(path.read_text(encoding="utf-8")) if path.exists() else None
 
 
+def load_layers(data_dir: Path) -> dict[str, list[dict]]:
+    """Area profiles by layer: 'tracts' from acs_tracts.json plus every areas_<layer>.json rollup."""
+    layers = {}
+    acs = data_dir / "acs_tracts.json"
+    if acs.exists():
+        tracts = json.loads(acs.read_text(encoding="utf-8"))["tracts"]
+        layers["tracts"] = [{**t, "area": t["geoid"], "burden": observed_burden(t)} for t in tracts]
+    for f in sorted(data_dir.glob("areas_*.json")):
+        layers[f.stem.removeprefix("areas_")] = json.loads(f.read_text(encoding="utf-8"))["areas"]
+    return layers
+
+
+SORTS = {"area": lambda a: a["area"], "renter_share": lambda a: a.get("renter_share") or 0,
+         "burden": lambda a: a["burden"].get("energy_burden_all") or 0,
+         "renter_burden": lambda a: a["burden"].get("energy_burden_renter") or 0}
+
+
 def create_app(data_dir: Path = DATA_DIR) -> FastAPI:
     store = Store.load(data_dir)
     income = load_income(data_dir)
+    layers = load_layers(data_dir)
+    tariffs = {t["id"]: t for t in load_tariffs(data_dir)}
     app = FastAPI(title="UtilityTrack")
 
     @app.middleware("http")
@@ -68,6 +88,23 @@ def create_app(data_dir: Path = DATA_DIR) -> FastAPI:
         return TEMPLATES.TemplateResponse(request, "income.html", {
             "income": income, "tracts": sorted(tracts, key=lambda t: t["geoid"]), "county": county})
 
+    @app.get("/neighborhoods", response_class=HTMLResponse)
+    def neighborhoods_page(request: Request, layer: str | None = None, sort: str = "burden"):
+        layer = layer if layer in layers else next(iter(layers), None)
+        rows = sorted(layers.get(layer, []), key=SORTS.get(sort, SORTS["burden"]), reverse=sort != "area")
+        return TEMPLATES.TemplateResponse(request, "neighborhoods.html", {
+            "layers": list(layers), "layer": layer, "rows": rows, "sort": sort})
+
+    @app.get("/bill", response_class=HTMLResponse)
+    def bill_page(request: Request, tariff: str | None = None, usage: float = 1000, month: int = 7,
+                  income: float | None = None):
+        t = tariffs.get(tariff) or next(iter(tariffs.values()), None)
+        bill = monthly_bill(t, usage, month) if t and 1 <= month <= 12 else None
+        share = round(bill["total"] * 12 / income, 4) if bill and income else None
+        return TEMPLATES.TemplateResponse(request, "bill.html", {
+            "tariffs": list(tariffs.values()), "t": t, "bill": bill, "usage": usage, "month": month,
+            "income": income, "share": share})
+
     # ---- JSON API ------------------------------------------------------
     @app.get("/api/utilities")
     def api_utilities():
@@ -92,10 +129,29 @@ def create_app(data_dir: Path = DATA_DIR) -> FastAPI:
             raise HTTPException(404, "No income data yet; run: python -m rate_tracker census-income")
         return income
 
+    @app.get("/api/areas/{layer}")
+    def api_areas(layer: str):
+        if layer not in layers:
+            raise HTTPException(404, f"No layer '{layer}'; have: {sorted(layers)}")
+        return layers[layer]
+
+    @app.get("/api/tariffs")
+    def api_tariffs():
+        return list(tariffs.values())
+
+    @app.get("/api/bill/{tariff_id}")
+    def api_bill(tariff_id: str, usage: float, month: int = 7):
+        if tariff_id not in tariffs:
+            raise HTTPException(404, f"No tariff '{tariff_id}'")
+        if not 1 <= month <= 12:
+            raise HTTPException(422, "month must be 1-12")
+        return monthly_bill(tariffs[tariff_id], usage, month)
+
     @app.get("/healthz")
     def healthz():
         return {"ok": True, "rate_actions": len(store.rate_actions),
-                "drivers": len(store.cost_drivers), "income_loaded": income is not None}
+                "drivers": len(store.cost_drivers), "income_loaded": income is not None,
+                "layers": sorted(layers), "tariffs": len(tariffs)}
 
     log.info("web_app_created",
              extra={"ctx": {"data_dir": str(data_dir), "income_loaded": income is not None}})

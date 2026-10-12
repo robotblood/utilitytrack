@@ -7,21 +7,28 @@
   todo                      list records flagged needs_verification
   export-csv <out_dir>      flat CSVs for Notion / PostgreSQL import
   serve [--port 8000]       run the web app (needs: pip install -e ".[web]")
+
+  Neighborhood pipeline (see README):
+  acs-profiles [--year 2024]                 tract demographics + utility costs from the ACS
+  crosswalk <layer> --areas F --id-field N   tract -> area weights (needs ".[geo]")
+  rollup <layer>                             area profiles with energy burden
+  bill <tariff_id> <usage> [--month 7]       itemized monthly bill
 """
 import argparse
 import csv
 import sys
 from pathlib import Path
 
+from .bills import load_tariffs, monthly_bill, validate_tariffs
 from .log import get_logger
-from .store import Store
+from .store import DATA_DIR, Store
 
 log = get_logger()
 ARROW = {"up": "▲", "down": "▼"}
 
 
 def cmd_validate(store: Store, _args) -> int:
-    errors = store.validate()
+    errors = store.validate() + validate_tariffs(load_tariffs())
     log.info("validate", extra={"ctx": {"errors": len(errors)}})
     for e in errors:
         print("ERROR", e)
@@ -66,7 +73,7 @@ def cmd_why(store: Store, args) -> int:
 
 
 def cmd_todo(store: Store, _args) -> int:
-    flagged = [r for r in store.rate_actions + store.cost_drivers
+    flagged = [r for r in store.rate_actions + store.cost_drivers + load_tariffs()
                if r.get("verification") == "needs_verification"]
     for r in flagged:
         print(f"{r['id']:<34} {r['sources'][0]}")
@@ -98,6 +105,59 @@ def cmd_export(store: Store, args) -> int:
     return 0
 
 
+GEO_DIR = DATA_DIR / "geo"
+ACS_FILE = DATA_DIR / "acs_tracts.json"
+
+
+def cmd_crosswalk(args) -> int:
+    import json
+
+    from .geo import crosswalk, load_features
+    keep = {"COUNTYFP": {"055", "153"}} if not args.all_counties else None
+    tracts = load_features(Path(args.tracts), args.tract_id_field, keep=keep)
+    areas = load_features(Path(args.areas), args.id_field)
+    rows = crosswalk(tracts, areas)
+    GEO_DIR.mkdir(parents=True, exist_ok=True)
+    out = GEO_DIR / f"crosswalk_{args.layer}.json"
+    out.write_text(json.dumps({"layer": args.layer, "tracts_file": Path(args.tracts).name,
+                               "areas_file": Path(args.areas).name, "rows": rows}, indent=1))
+    print(f"{len(rows)} tract/area pairs for {len({r['area'] for r in rows})} areas -> {out}")
+    return 0
+
+
+def cmd_rollup(args) -> int:
+    import json
+
+    from .bills import observed_burden
+    from .geo import rollup
+    if not ACS_FILE.exists():
+        print("No tract profiles yet; run: python -m rate_tracker acs-profiles")
+        return 1
+    acs = json.loads(ACS_FILE.read_text())
+    xw = json.loads((GEO_DIR / f"crosswalk_{args.layer}.json").read_text())
+    areas = [{**a, "burden": observed_burden(a)} for a in rollup(acs["tracts"], xw["rows"])]
+    out = DATA_DIR / f"areas_{args.layer}.json"
+    out.write_text(json.dumps({"layer": args.layer, "source": acs["source"],
+                               "method": "area-weighted tract overlay", "areas": areas}, indent=1))
+    log.info("rollup_written", extra={"ctx": {"layer": args.layer, "areas": len(areas)}})
+    print(f"Wrote {len(areas)} {args.layer} profiles to {out}")
+    return 0
+
+
+def cmd_bill(args) -> int:
+    tariff = next((t for t in load_tariffs() if t["id"] == args.tariff_id), None)
+    if tariff is None:
+        print(f"No tariff '{args.tariff_id}'; have: {', '.join(t['id'] for t in load_tariffs())}")
+        return 1
+    b = monthly_bill(tariff, args.usage, args.month)
+    if tariff["verification"] != "verified":
+        print("[tariff needs verification]")
+    for line in b["lines"]:
+        print(f"  {line['item']:<50} ${line['amount']:>8.2f}")
+    print(f"  {'total':<50} ${b['total']:>8.2f}")
+    return 0
+
+
 def main(argv=None) -> int:
     p = argparse.ArgumentParser(prog="rate_tracker", description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -120,7 +180,33 @@ def main(argv=None) -> int:
     sv.add_argument("--host", default="127.0.0.1")
     sv.add_argument("--port", type=int, default=8000)
     sv.add_argument("--reload", action="store_true")
+    ap = sub.add_parser("acs-profiles", help="tract demographics + utility costs (Douglas + Sarpy)")
+    ap.add_argument("--year", type=int, default=2024, help="ACS 5-year end year")
+    ap.add_argument("--key", help="Census API key (or set CENSUS_API_KEY)")
+    ap.add_argument("--raw", help="re-use a saved raw pull (data/acs_raw_<year>.json)")
+    cw = sub.add_parser("crosswalk", help="tract -> neighborhood/ZIP weights by area overlay")
+    cw.add_argument("layer", help="name for this boundary set, e.g. neighborhoods or zcta")
+    cw.add_argument("--areas", required=True, help="GeoJSON or zipped shapefile of areas")
+    cw.add_argument("--id-field", required=True, help="property holding the area name/code")
+    cw.add_argument("--tracts", default=str(GEO_DIR / "cb_2024_31_tract_500k.zip"))
+    cw.add_argument("--tract-id-field", default="GEOID")
+    cw.add_argument("--all-counties", action="store_true", help="skip the Douglas/Sarpy filter")
+    ru = sub.add_parser("rollup", help="area profiles + energy burden from tract profiles")
+    ru.add_argument("layer")
+    bl = sub.add_parser("bill", help="itemized monthly bill for a tariff")
+    bl.add_argument("tariff_id")
+    bl.add_argument("usage", type=float, help="usage in the tariff's unit (kWh, Ccf)")
+    bl.add_argument("--month", type=int, default=7)
     args = p.parse_args(argv)
+
+    if args.cmd == "acs-profiles":
+        from .acs import run as run_acs
+        tracts = run_acs(args.year, ACS_FILE, args.key, args.raw)
+        print(f"Wrote {len(tracts)} tract profiles to {ACS_FILE}")
+        return 0
+    if args.cmd in ("crosswalk", "rollup", "bill"):
+        log.info("command", extra={"ctx": {"cmd": args.cmd}})
+        return {"crosswalk": cmd_crosswalk, "rollup": cmd_rollup, "bill": cmd_bill}[args.cmd](args)
 
     if args.cmd == "serve":
         import uvicorn

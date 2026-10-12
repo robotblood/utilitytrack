@@ -22,10 +22,11 @@
     .scroll { overflow-x: auto; }
     form { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 16px; }
     section { margin-bottom: 24px; }
+    .severe { color: var(--up); font-weight: 600; } .high { color: var(--up); }
   </style>
 </head>
 <body>
-  <nav><a href="/">Rate timeline</a><a href="/income">Income by tract</a><a href="/docs">API</a></nav>
+  <nav><a href="/">Rate timeline</a><a href="/income">Income by tract</a><a href="/neighborhoods">Neighborhoods</a><a href="/bill">Bill calculator</a><a href="/docs">API</a></nav>
   {% block content %}{% endblock %}
 </body>
 </html>

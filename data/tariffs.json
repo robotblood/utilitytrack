@@ -1,0 +1,19 @@
+[
+  {
+    "id": "oppd-rate-110-2026",
+    "utility": "OPPD",
+    "service": "electric",
+    "schedule": "Rate 110 Residential Service",
+    "effective_date": "2026-01-01",
+    "unit": "kWh",
+    "fixed_monthly": [{"name": "service charge", "amount": 30.00}],
+    "seasons": {
+      "summer": {"months": [6, 7, 8, 9], "blocks": [{"up_to": null, "rate": 0.11937}]},
+      "non_summer": {"months": [1, 2, 3, 4, 5, 10, 11, 12], "blocks": [{"up_to": null, "rate": 0.09503}]}
+    },
+    "riders": [{"name": "FPPA (fuel and purchased power adjustment)", "rate": 0.00521}],
+    "notes": "Figures from a third-party tariff snapshot dated 2026-07-21, not OPPD's tariff book. To confirm: (1) whether $30 is a service charge or the minimum monthly bill (OPPD's page says minimum bill), (2) summer months (Jun-Sep assumed), (3) whether non-summer energy is tiered by kWh block, (4) current FPPA factor.",
+    "sources": ["https://utility-rates.com/providers/oppd", "https://oppd.com/residential/residential-rates/"],
+    "verification": "needs_verification"
+  }
+]

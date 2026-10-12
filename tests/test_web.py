@@ -37,6 +37,20 @@ class WebTests(unittest.TestCase):
         body = self.client.get("/api/actions/oppd-2025").json()
         self.assertEqual(len(body["drivers"]), len(body["driver_ids"]))
 
+    def test_neighborhoods_empty_state(self):
+        r = self.client.get("/neighborhoods")
+        self.assertEqual(r.status_code, 200)
+        self.assertIn("acs-profiles", r.text)
+
+    def test_bill_page_and_api(self):
+        r = self.client.get("/bill", params={"usage": 1000, "month": 7, "income": 30000})
+        self.assertEqual(r.status_code, 200)
+        self.assertIn("needs verification", r.text)
+        body = self.client.get("/api/bill/oppd-rate-110-2026", params={"usage": 0, "month": 1}).json()
+        self.assertEqual(body["total"], 30.0)
+        self.assertEqual(self.client.get("/api/bill/oppd-rate-110-2026",
+                                         params={"usage": 1, "month": 13}).status_code, 422)
+
     def test_income_page_without_data(self):
         r = self.client.get("/income")
         self.assertEqual(r.status_code, 200)
@@ -63,6 +77,43 @@ class WebIncomeTests(unittest.TestCase):
         self.assertIn("31055000100", r.text)
         self.assertIn("25%", r.text)
         self.assertEqual(self.client.get("/api/income/tracts").json()["tracts"][0]["county"], "Douglas")
+
+
+@unittest.skipIf(TestClient is None, "web extra not installed")
+class WebNeighborhoodTests(unittest.TestCase):
+    def setUp(self):
+        from rate_tracker.acs import build
+        from rate_tracker.bills import observed_burden
+        from rate_tracker.geo import rollup
+        from tests.acs_fixture import LABELS, row
+        self.tmp = Path(tempfile.mkdtemp())
+        for f in DATA_DIR.glob("*.json"):
+            shutil.copy(f, self.tmp)
+        tracts = build(LABELS, [row("000100", renters=40), row("000200", renters=80)])
+        (self.tmp / "acs_tracts.json").write_text(json.dumps({"source": "test", "tracts": tracts}))
+        xw = [{"geoid": "31055000100", "area": "Benson", "weight": 1.0},
+              {"geoid": "31055000200", "area": "Dundee", "weight": 1.0}]
+        areas = [{**a, "burden": observed_burden(a)} for a in rollup(tracts, xw)]
+        (self.tmp / "areas_neighborhoods.json").write_text(json.dumps({"areas": areas}))
+        self.client = TestClient(create_app(self.tmp))
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp)
+
+    def test_layers(self):
+        self.assertEqual(self.client.get("/healthz").json()["layers"], ["neighborhoods", "tracts"])
+
+    def test_neighborhood_table(self):
+        r = self.client.get("/neighborhoods", params={"layer": "neighborhoods", "sort": "renter_share"})
+        self.assertEqual(r.status_code, 200)
+        self.assertLess(r.text.index("Dundee"), r.text.index("Benson"))  # 80% renters sorts first
+        self.assertIn("80.0%", r.text)
+
+    def test_tract_layer_and_api(self):
+        self.assertIn("31055000100", self.client.get("/neighborhoods", params={"layer": "tracts"}).text)
+        areas = self.client.get("/api/areas/neighborhoods").json()
+        self.assertIn("energy_burden_renter", areas[0]["burden"])
+        self.assertEqual(self.client.get("/api/areas/nope").status_code, 404)
 
 
 if __name__ == "__main__":

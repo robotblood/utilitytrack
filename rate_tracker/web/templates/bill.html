@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Bill calculator · UtilityTrack{% endblock %}
+{% block content %}
+<h1>Bill calculator</h1>
+{% if not t %}
+<p class="muted">No tariffs loaded. Add them to <code>data/tariffs.json</code>.</p>
+{% else %}
+<form method="get">
+  <select name="tariff">{% for x in tariffs %}<option value="{{ x.id }}"{% if x.id == t.id %} selected{% endif %}>{{ x.utility }} {{ x.schedule }}</option>{% endfor %}</select>
+  <label>Usage <input name="usage" type="number" step="any" min="0" value="{{ usage }}" style="width:7em"> {{ t.unit }}</label>
+  <label>Month <input name="month" type="number" min="1" max="12" value="{{ month }}" style="width:4em"></label>
+  <label>Household income <input name="income" type="number" min="0" step="1000" value="{{ income or '' }}" placeholder="optional" style="width:8em"></label>
+  <button type="submit">Calculate</button>
+</form>
+{% if t.verification != "verified" %}<p><span class="flag">tariff needs verification</span> <span class="muted">{{ t.notes }}</span></p>{% endif %}
+{% if bill %}
+<div class="scroll"><table>
+  {% for l in bill.lines %}<tr><td>{{ l.item }}</td><td class="num">${{ "%.2f"|format(l.amount) }}</td></tr>{% endfor %}
+  <tr><th>Total</th><th class="num">${{ "%.2f"|format(bill.total) }}</th></tr>
+</table></div>
+{% if share is not none %}
+<p>At this bill every month, that is <strong>{{ "%.1f%%"|format(share * 100) }}</strong> of a ${{ "{:,.0f}".format(income) }} income
+  for this one utility.</p>
+{% endif %}
+{% endif %}
+<p class="muted">Sources: {% for s in t.sources %}<a href="{{ s }}" rel="noopener">{{ s }}</a> {% endfor %}</p>
+{% endif %}
+{% endblock %}
