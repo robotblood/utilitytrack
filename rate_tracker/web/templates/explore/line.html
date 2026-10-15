@@ -1,0 +1,83 @@
+{% extends "explore/layout.html" %}
+{% block title %}The 6% line · UtilityTrack{% endblock %}
+{% block crumb %} · The 6% line{% endblock %}
+{% macro n(v) %}{{ "{:,.0f}".format(v) }}{% endmacro %}
+{% macro share(a, b) %}{{ "%.0f%%"|format(a / b * 100) if b else "–" }}{% endmacro %}
+{% block page %}
+<h1>Households under the 6% line</h1>
+{% if not r %}
+<p class="muted">No tract profiles yet. Run <code>python -m rate_tracker acs-profiles --year 2024</code>, then restart.</p>
+{% else %}
+{% set a, ten, f = r.all, r.tenure, r.in_flagged %}
+<p class="lede">Every tract has a 6% line: the household income at which that tract's typical electricity and gas bill
+  takes 6% of what the household earns. Across most tracts the line sits between
+  ${{ "%.0f"|format(r.line_spread[0] / 1000) }}k and ${{ "%.0f"|format(r.line_spread[1] / 1000) }}k a year.</p>
+
+<div class="hero">{{ "{:,.0f}".format((a.under_6 / 1000)|round * 1000) }}</div>
+<p style="margin-top:0">estimated households, {{ share(a.under_6, a.households) }} of {{ n(a.households) }} in Douglas and Sarpy,
+  earn less than their tract's 6% line. {{ n(a.under_10) }} are under the 10% line.</p>
+
+<div class="legend" style="margin-top:16px">
+  <span data-c="4"><i class="c"></i>under the 10% line</span>
+  <span data-c="3"><i class="c"></i>between the 10% and 6% lines</span>
+  <span><i style="background:var(--line)"></i>above the 6% line</span>
+</div>
+{% for key, label in [("renter", "Renters"), ("owner", "Owners")] %}{% set t = ten[key] %}
+<div class="stack-row">
+  <div class="head"><strong>{{ label }}</strong>
+    <span><strong>{{ share(t.under_6, t.households) }}</strong> under the 6% line
+      <span class="muted">· {{ n(t.under_6) }} of {{ n(t.households) }}</span></span></div>
+  <div class="stack100">
+    <span data-c="4" style="flex:{{ t.under_10 }}" data-tip="{{ label }}|{{ n(t.under_10) }}|under the 10% line|{{ share(t.under_10, t.households) }}"></span>
+    <span data-c="3" style="flex:{{ t.under_6 - t.under_10 }}" data-tip="{{ label }}|{{ n(t.under_6 - t.under_10) }}|between the 10% and 6% lines|{{ share(t.under_6 - t.under_10, t.households) }}"></span>
+    <span class="rest" style="flex:{{ t.households - t.under_6 }}" data-tip="{{ label }}|{{ n(t.households - t.under_6) }}|above the 6% line|{{ share(t.households - t.under_6, t.households) }}"></span>
+  </div>
+</div>
+{% endfor %}
+
+<h2 style="font-size:18px;margin-top:32px">The median view misses most of them</h2>
+<p>The <a href="/explore/map">burden map</a> flags {{ r.flagged_tracts }} of {{ r.tracts }} tracts, where the typical
+  household's bill passes 6%. Only <strong>{{ share(f.under_6, a.under_6) }}</strong> of the households under the line
+  live there. The other {{ share(a.under_6 - f.under_6, a.under_6) }} live in tracts whose median looks fine, which is
+  the trouble with judging a neighborhood by its middle household.</p>
+<div class="legend">
+  <span data-c="3"><i class="c"></i>in a flagged tract</span>
+  <span><i style="background:var(--quiet)"></i>in a tract the median calls fine</span>
+</div>
+<div class="stack100" style="height:24px">
+  <span data-c="3" style="flex:{{ f.under_6 }}" data-tip="Under the 6% line|{{ n(f.under_6) }}|in the {{ r.flagged_tracts }} flagged tracts|{{ share(f.under_6, a.under_6) }}"></span>
+  <span class="muted-seg" style="flex:{{ a.under_6 - f.under_6 }}" data-tip="Under the 6% line|{{ n(a.under_6 - f.under_6) }}|in the other {{ r.tracts - r.flagged_tracts }} tracts|{{ share(a.under_6 - f.under_6, a.under_6) }}"></span>
+</div>
+<p class="muted" style="font-size:14px;margin-top:2px">{{ n(f.under_6) }} in flagged tracts · {{ n(a.under_6 - f.under_6) }} elsewhere</p>
+
+<p class="note" style="margin-top:24px"><strong>What this is not:</strong> a count of households paying more than 6%. ACS
+  reports bills and incomes separately, never together, so this asks a narrower question: who earns too little for the
+  typical local bill to stay under 6%? Lower-income homes often use less energy than their tract's median, which would
+  lower the count. Gas bills in ACS's top bin ("$150 or more", {{ r.lines|selectattr("floor")|list|length }} tracts) are
+  floors, which would raise it. Incomes are spread evenly within each Census income bin. DOE's LEAD tool models
+  burden by income and tenure directly, and is the next source to bring in.</p>
+
+<details class="table-view"><summary>Table view: every tract's line</summary>
+<div class="scroll"><table>
+  <tr><th>Tract</th><th class="num">6% line</th><th class="num">Households</th><th class="num">Under the line</th>
+    <th class="num">Share</th><th>Median flagged</th></tr>
+  {% for l in r.lines %}
+  <tr><td>{{ l.name }}</td><td class="num">{{ "≥" if l.floor }}${{ n(l.line) }}</td><td class="num">{{ n(l.households) }}</td>
+    <td class="num">{{ n(l.under) }}</td><td class="num">{{ share(l.under, l.households) }}</td>
+    <td>{{ "yes" if l.flagged else "" }}</td></tr>
+  {% endfor %}
+</table></div>
+</details>
+{% endif %}
+{% endblock %}
+{% block scripts %}{% if r %}
+<script>
+(() => {
+  document.querySelectorAll("[data-tip]").forEach((seg) => {
+    const [title, value, label, pct] = seg.dataset.tip.split("|");
+    seg.addEventListener("pointermove", (e) => tip.show(e.clientX, e.clientY, title, [[value, label], [pct, "of the group"]]));
+    seg.addEventListener("pointerleave", tip.hide);
+  });
+})();
+</script>
+{% endif %}{% endblock %}

@@ -1,0 +1,109 @@
+{% extends "explore/layout.html" %}
+{% block title %}Same increase · UtilityTrack{% endblock %}
+{% block crumb %} · Same increase, different weight{% endblock %}
+{% set names = ["Lowest-income fifth", "Second fifth", "Middle fifth", "Fourth fifth", "Highest-income fifth"] %}
+{% macro k(v) %}${{ "%.0f"|format(v / 1000) }}k{% endmacro %}
+{% block page %}
+<h1>Same increase, different weight</h1>
+{% if not tracts or not a %}
+<p class="muted">Needs tract profiles (<code>python -m rate_tracker acs-profiles --year 2024</code>) and at least one rate action.</p>
+{% else %}
+{% set h = a.headline %}
+<form class="controls" method="get">
+  <select name="action" onchange="this.form.submit()" aria-label="Rate decision">
+    {% for x in actions %}<option value="{{ x.id }}"{% if x.id == a.id %} selected{% endif %}>{{ x.utility }} {{ x.service }}
+      {{ x.effective_date[:4] }} · {{ "%+.1f%%"|format(x.headline.value) }} {{ x.headline.label }}</option>{% endfor %}
+  </select>
+  <noscript><button type="submit">Show</button></noscript>
+</form>
+
+{% set lo, hi = groups[0], groups[-1] %}
+{% if h.value == 0 %}
+<p class="lede">{{ a.utility }} held the {{ h.label }} flat for {{ a.effective_date[:4] }}, so there is nothing to spread. Pick another decision.</p>
+{% else %}
+{% set more = "more" if h.value > 0 else "less" %}
+<p class="lede">{{ a.utility }}'s {{ a.effective_date[:4] }} {{ a.service }} decision moved the {{ h.label }}
+  {{ "%+.1f%%"|format(h.value) }}: one number for everyone. In the lowest-income fifth of tracts it means about
+  <strong>${{ "%.0f"|format(lo.added|abs) }} {{ more }}</strong> a year, {{ "%.2f%%"|format(lo.share|abs * 100) }} of income.
+  In the highest-income fifth, ${{ "%.0f"|format(hi.added|abs) }} {{ more }}, {{ "%.2f%%"|format(hi.share|abs * 100) }}.
+  {% if hi.share %}Per dollar earned, {{ "it weighs" if h.value > 0 else "the relief is worth" }}
+  <strong>{{ "%.1f"|format(lo.share / hi.share) }}×</strong> as much at the bottom.{% endif %}</p>
+{% endif %}
+{% if a.verification != "verified" %}
+<div class="flagbar">This rate action is flagged <strong>{{ a.verification.replace("_", " ") }}</strong>; the percentage may change.</div>
+{% endif %}
+
+{% set max_added = groups|map(attribute="added")|map("abs")|max or 1 %}
+{% set max_share = groups|map(attribute="share")|map("abs")|max or 1 %}
+<div class="pair">
+  <section>
+    <h3>{{ "Added" if h.value >= 0 else "Saved" }} per household, per year</h3>
+    <p class="note" style="margin:2px 0">Dollars: roughly level, a little higher where homes are bigger.</p>
+    <div class="bars">
+      {% for g in groups %}
+      <div class="who">{{ names[loop.index0] if groups|length == 5 else "Group " ~ g.group }}<small>{{ k(g.lo) }}–{{ k(g.hi) }} median income</small></div>
+      <div class="track"><span class="bar" style="--k:var(--quiet);width:{{ (g.added|abs / max_added * 80)|round(1) }}%"
+        tabindex="0" data-g="{{ loop.index0 }}"></span>${{ "%.0f"|format(g.added|abs) }}</div>
+      {% endfor %}
+    </div>
+  </section>
+  <section>
+    <h3>As a share of income</h3>
+    <p class="note" style="margin:2px 0">The weight: highest where incomes are lowest.</p>
+    <div class="bars">
+      {% for g in groups %}
+      <div class="who">{{ names[loop.index0] if groups|length == 5 else "Group " ~ g.group }}<small>{{ "{:,.0f}".format(g.households) }} households</small></div>
+      <div class="track"><span class="bar" style="width:{{ (g.share|abs / max_share * 80)|round(1) }}%"
+        tabindex="0" data-g="{{ loop.index0 }}"></span>{{ "%.2f%%"|format(g.share|abs * 100) }}</div>
+      {% endfor %}
+    </div>
+  </section>
+</div>
+
+<p class="note">How: the {{ h.label }} change is applied to each tract's ACS median monthly
+  {{ {"electric": "electricity", "gas": "gas", "water": "water and sewer"}[a.service] }} bill, then tracts are ordered by
+  median household income and cut into fifths of about {{ "{:,.0f}".format(groups[0].households) }} households each.
+  Averages are weighted by households. A rate change is not a bill change: with a fixed monthly charge, small bills move
+  by a different percentage than big ones (see <a href="/explore/fixed-charge">who pays the fixed charge</a>).
+  {% if a.service == "gas" %}{{ groups|sum(attribute="floors") }} tracts have a median gas bill in the "$150 or more" bin, so their dollars are floors.{% endif %}
+  {% if a.service == "water" %}ACS combines water and sewer and MUD sets only the water part, so the dollars here run high; the
+  share-of-income pattern holds.{% endif %}</p>
+
+<details class="table-view"><summary>Table view</summary>
+<div class="scroll"><table>
+  <tr><th>Group</th><th class="num">Tracts</th><th class="num">Households</th><th class="num">Median income range</th>
+    <th class="num">$ a year</th><th class="num">Share of income</th></tr>
+  {% for g in groups %}
+  <tr><td>{{ names[loop.index0] if groups|length == 5 else g.group }}</td><td class="num">{{ g.tracts }}</td>
+    <td class="num">{{ "{:,.0f}".format(g.households) }}</td><td class="num">{{ k(g.lo) }}–{{ k(g.hi) }}</td>
+    <td class="num">{{ "%+.2f"|format(g.added) }}</td><td class="num">{{ "%+.3f%%"|format(g.share * 100) }}</td></tr>
+  {% endfor %}
+</table></div>
+</details>
+<p class="note">Decision: <a href="/actions/{{ a.id }}">{{ a.id }}</a>{% if a.driver_ids %} · why it moved:
+  {% for d in a.driver_ids %}{{ d }}{{ ", " if not loop.last }}{% endfor %}{% endif %}</p>
+<script type="application/json" id="groups">{{ {"groups": groups, "names": names}|tojson }}</script>
+{% endif %}
+{% endblock %}
+{% block scripts %}{% if groups %}
+<script>
+(() => {
+  const { groups, names } = JSON.parse(document.getElementById("groups").textContent);
+  function show(bar, x, y) {
+    const g = groups[+bar.dataset.g];
+    tip.show(x, y, names[+bar.dataset.g] || `Group ${g.group}`, [
+      [`${g.added >= 0 ? "+" : "−"}${fmt.money(Math.abs(g.added))}`, "a year, per household"],
+      [`${(Math.abs(g.share) * 100).toFixed(2)}%`, "of median income"],
+      [Math.round(g.households).toLocaleString(), `households in ${g.tracts} tracts`],
+      [`${fmt.k(g.lo)}–${fmt.k(g.hi)}`, "tract median incomes"],
+    ]);
+  }
+  document.querySelectorAll(".bars .bar").forEach((bar) => {
+    bar.addEventListener("pointermove", (e) => show(bar, e.clientX, e.clientY));
+    bar.addEventListener("pointerleave", tip.hide);
+    bar.addEventListener("focus", () => { const r = bar.getBoundingClientRect(); show(bar, r.right, r.top); });
+    bar.addEventListener("blur", tip.hide);
+  });
+})();
+</script>
+{% endif %}{% endblock %}

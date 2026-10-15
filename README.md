@@ -39,9 +39,9 @@ and Black Hills Energy (listed as `planned` in `data/utilities.json`).
     ruff check .
 
 ### Household income by census tract (Douglas + Sarpy)
-Get a free key at https://api.census.gov/data/key_signup.html, then:
+Get a free key at https://api.census.gov/data/key_signup.html and put it in `.env` as
+`CENSUS_API_KEY` (the CLI reads `.env` itself; a shell export wins), then:
 
-    export CENSUS_API_KEY=your_key
     python3 -m rate_tracker census-income --year 2024
 
 Writes `data/geo_income_tracts.json` (all 16 Census ranges, plus six groups: <$20k, $20–30k, $30–50k, $50–75k, $75–125k, $125k+, each with count, margin of error and share)

@@ -1,0 +1,124 @@
+{% extends "explore/layout.html" %}
+{% block title %}Cost vs income · UtilityTrack{% endblock %}
+{% block crumb %} · Cost vs income{% endblock %}
+{% block page %}
+<h1>The bill barely moves. Income does.</h1>
+{% if not points %}
+<p class="muted">No tract profiles yet. Run <code>python -m rate_tracker acs-profiles --year 2024</code>, then restart.</p>
+{% else %}
+{% set c, i = cost_spread, income_spread %}
+<p class="lede">Every dot is a census tract: its typical monthly electricity and gas bill against its typical income.
+  Bills stay in a narrow band across the metro; incomes do not. Whether a tract crosses the 6% line depends far more
+  on what households earn than on what they pay.</p>
+
+<div class="tiles">
+  <div class="tile"><div class="label">Typical energy bill, most tracts</div>
+    <div class="value">${{ "%.0f"|format(c[0]) }}–${{ "%.0f"|format(c[1]) }}<span class="muted" style="font-size:15px;font-weight:400"> /mo</span></div>
+    <div class="muted">the top is {{ "%.1f"|format(c[1] / c[0]) }}× the bottom</div></div>
+  <div class="tile"><div class="label">Median household income, most tracts</div>
+    <div class="value">${{ "%.0f"|format(i[0] / 1000) }}k–${{ "%.0f"|format(i[1] / 1000) }}k</div>
+    <div class="muted">the top is {{ "%.1f"|format(i[1] / i[0]) }}× the bottom</div></div>
+</div>
+<p class="note">"Most tracts" = the middle 80% (10th to 90th percentile).</p>
+
+<form class="controls" onsubmit="return false">
+  <span class="seg" role="radiogroup" aria-label="Income of">
+    {% for key, label in [("all", "All households"), ("renter", "Renters"), ("owner", "Owners")] %}
+    <label><input type="radio" name="who" value="{{ key }}"{% if loop.first %} checked{% endif %}> {{ label }}</label>
+    {% endfor %}
+  </span>
+  <span id="count" class="muted" aria-live="polite"></span>
+</form>
+<div class="legend"><span><span class="key-dot"></span>tract</span>
+  <span><i style="background:var(--accent);opacity:.25"></i>more than 6% of income</span>
+  <span><span class="key-dot floor"></span>gas bill in the "$150 or more" bin, so the true point sits higher</span></div>
+
+<svg id="scatter" class="chart" viewBox="0 0 {{ chart.width }} {{ chart.height }}" role="img"
+     aria-label="Scatter of tracts: monthly energy bill against median household income, with 6% and 10% burden lines">
+  {% set r6 = chart.rays[0] %}
+  <polygon class="zone" points="{{ r6.x0 }},{{ r6.y0 }} {{ r6.x2 }},{{ r6.y2 }} {{ r6.x2 }},{{ chart.top }} {{ chart.left }},{{ chart.top }}"/>
+  {% for tk in chart.yticks %}
+  <line class="{{ 'base' if tk.v == 0 else 'grid' }}" x1="{{ chart.left }}" x2="{{ chart.right }}" y1="{{ tk.y }}" y2="{{ tk.y }}"/>
+  <text x="{{ chart.left - 8 }}" y="{{ tk.y + 4 }}" text-anchor="end">${{ tk.v }}</text>
+  {% endfor %}
+  {% for tk in chart.xticks %}
+  <text x="{{ tk.x }}" y="{{ chart.bottom + 22 }}" text-anchor="{{ 'start' if loop.first else 'end' if loop.last else 'middle' }}">{{ "$%dk"|format(tk.v // 1000) }}{% if loop.last %} income{% endif %}</text>
+  {% endfor %}
+  {% for r in chart.rays %}
+  <line class="ray" x1="{{ r.x0 }}" y1="{{ r.y0 }}" x2="{{ r.x2 }}" y2="{{ r.y2 }}"/>
+  <text class="ray-label" x="{{ r.x2 + (4 if loop.first else -4) }}" y="{{ r.y2 - 8 }}" text-anchor="{{ 'start' if loop.first else 'end' }}">{{ "%d"|format(r.rate * 100) }}% of income</text>
+  {% endfor %}
+  {% for p in points %}
+  <circle class="dot{{ ' floor' if p.floor }}" r="4.5" data-i="{{ loop.index0 }}"/>
+  {% endfor %}
+</svg>
+<p class="note">Bill = ACS median monthly electricity + median monthly gas for the tract. ACS does not split bills by
+  tenure or income, so the renter and owner views move each dot sideways only: same bill, that group's income.
+  {{ points|rejectattr("income.renter")|list|length }} tracts have too few renters to estimate and drop out of that view.
+  Owner incomes are top-coded at $250,000.</p>
+
+<details class="table-view"><summary>Table view</summary>
+<div class="scroll"><table>
+  <tr><th>Tract</th><th class="num">Energy $/mo</th><th class="num">Income, all</th><th class="num">Renters</th>
+    <th class="num">Owners</th><th class="num">Burden, all</th></tr>
+  {% for p in points|sort(attribute="income.all") %}
+  <tr><td>{{ p.name }}</td><td class="num">{{ "≥" if p.floor }}${{ "%.0f"|format(p.cost) }}</td>
+    {% for k in ("all", "renter", "owner") %}<td class="num">{{ "${:,.0f}".format(p.income[k]) if p.income[k] else "–" }}</td>{% endfor %}
+    <td class="num">{{ "%.1f%%"|format(p.cost * 1200 / p.income.all) if p.income.all else "–" }}</td></tr>
+  {% endfor %}
+</table></div>
+</details>
+<script type="application/json" id="points">{{ {"points": points, "scale": chart.scale}|tojson }}</script>
+{% endif %}
+{% endblock %}
+{% block scripts %}{% if points %}
+<script>
+(() => {
+  const { points, scale } = JSON.parse(document.getElementById("points").textContent);
+  const svg = document.getElementById("scatter"), dots = [...svg.querySelectorAll(".dot")];
+  const x = (v) => scale.x0 + v / scale.xhi * (scale.x1 - scale.x0);
+  const y = (v) => scale.y0 + (scale.yhi - v) / scale.yhi * (scale.y1 - scale.y0);
+  const who = () => document.querySelector("input[name=who]:checked").value;
+  const labels = { all: "all households", renter: "renters", owner: "owners" };
+  dots.forEach((d, i) => d.setAttribute("cy", y(points[i].cost)));
+
+  function place() {
+    const w = who();
+    let shown = 0, over = 0;
+    dots.forEach((d, i) => {
+      const inc = points[i].income[w];
+      d.classList.toggle("off", !inc);
+      if (!inc) return;
+      d.setAttribute("cx", x(inc));
+      shown += 1;
+      if (points[i].cost * 12 / inc > 0.06) over += 1;
+    });
+    document.getElementById("count").textContent = `${over} of ${shown} tracts above 6% for ${labels[w]}`;
+  }
+  document.querySelectorAll("input[name=who]").forEach((el) => el.addEventListener("change", place));
+
+  let on = null;
+  svg.addEventListener("pointermove", (e) => {  // nearest dot within 24px: no need to land on it
+    const pt = new DOMPoint(e.clientX, e.clientY).matrixTransform(svg.getScreenCTM().inverse());
+    const w = who();
+    let best = null, bestD = 24 ** 2;
+    dots.forEach((d, i) => {
+      if (d.classList.contains("off")) return;
+      const dd = (x(points[i].income[w]) - pt.x) ** 2 + (y(points[i].cost) - pt.y) ** 2;
+      if (dd < bestD) { best = i; bestD = dd; }
+    });
+    on?.classList.remove("on");
+    if (best == null) { tip.hide(); on = null; return; }
+    on = dots[best]; on.classList.add("on");
+    const p = points[best], floor = p.floor ? "≥ " : "";
+    tip.show(e.clientX, e.clientY, p.name, [
+      [`${floor}${fmt.pct(p.cost * 12 / p.income[w])}`, `of income, ${labels[w]}`],
+      [`${floor}${fmt.money(p.cost)}/mo`, "electricity + gas"],
+      [fmt.money(p.income[w]), `median income, ${labels[w]}`],
+    ]);
+  });
+  svg.addEventListener("pointerleave", () => { tip.hide(); on?.classList.remove("on"); on = null; });
+  place();
+})();
+</script>
+{% endif %}{% endblock %}

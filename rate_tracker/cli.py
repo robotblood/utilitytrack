@@ -20,6 +20,7 @@ import sys
 from pathlib import Path
 
 from .bills import load_tariffs, monthly_bill, validate_tariffs
+from .env import load_env
 from .log import get_logger
 from .store import DATA_DIR, Store
 
@@ -159,6 +160,7 @@ def cmd_bill(args) -> int:
 
 
 def main(argv=None) -> int:
+    load_env()  # CENSUS_API_KEY etc. from .env; shell exports win
     p = argparse.ArgumentParser(prog="rate_tracker", description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = p.add_subparsers(dest="cmd", required=True)

@@ -52,7 +52,8 @@ class WebTests(unittest.TestCase):
                                          params={"usage": 1, "month": 13}).status_code, 422)
 
     def test_explore_pages(self):
-        for path in ("/explore", "/explore/fixed-charge", "/explore/next", "/static/explore.css"):
+        for path in ("/explore", "/explore/fixed-charge", "/explore/next", "/static/explore.css",
+                     "/static/explore.js", "/explore/map", "/explore/increase"):
             self.assertEqual(self.client.get(path).status_code, 200, path)
         self.assertIn("minimum bill", self.client.get("/explore/fixed-charge").text)
         self.assertIn("third Thursday of December", self.client.get("/explore/next").text)
@@ -114,6 +115,13 @@ class WebNeighborhoodTests(unittest.TestCase):
         self.assertEqual(r.status_code, 200)
         self.assertLess(r.text.index("Dundee"), r.text.index("Benson"))  # 80% renters sorts first
         self.assertIn("80.0%", r.text)
+
+    def test_explore_tract_views(self):
+        for path in ("/explore", "/explore/cost-vs-income", "/explore/increase", "/explore/six-percent-line"):
+            self.assertEqual(self.client.get(path).status_code, 200, path)
+        self.assertIn("Tract 000200, Douglas", self.client.get("/explore/six-percent-line").text)
+        # the tmp data dir has no boundaries, so the map page says where to get them
+        self.assertIn("cb_2024_31_tract_500k.zip", self.client.get("/explore/map").text)
 
     def test_tract_layer_and_api(self):
         self.assertIn("31055000100", self.client.get("/neighborhoods", params={"layer": "tracts"}).text)

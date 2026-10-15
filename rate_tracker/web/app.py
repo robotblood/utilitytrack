@@ -2,6 +2,7 @@
 import json
 import time
 from datetime import date
+from functools import cache
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
@@ -10,10 +11,11 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from .. import explore
+from ..acs import COUNTIES
 from ..bills import load_tariffs, monthly_bill, observed_burden
 from ..log import get_logger
 from ..store import DATA_DIR, Store
-from .charts import usage_chart
+from .charts import scatter_scale, tract_map, usage_chart
 
 log = get_logger()
 WEB_DIR = Path(__file__).resolve().parent
@@ -41,6 +43,20 @@ def load_layers(data_dir: Path) -> dict[str, list[dict]]:
     return layers
 
 
+def load_tract_shapes(data_dir: Path) -> list | None:
+    """Douglas + Sarpy tract boundaries from data/geo/cb_<year>_31_tract_*.zip (Census cartographic file).
+    None when the file is missing or the geo extra is not installed."""
+    files = sorted((data_dir / "geo").glob("cb_*_31_tract_*.zip"))
+    if not files:
+        return None
+    try:
+        from ..geo import load_features
+        return load_features(files[-1], "GEOID", keep={"COUNTYFP": set(COUNTIES)})
+    except ImportError:
+        log.warning("tract_shapes_skipped", extra={"ctx": {"reason": "geo extra not installed"}})
+        return None
+
+
 SORTS = {"area": lambda a: a["area"], "renter_share": lambda a: a.get("renter_share") or 0,
          "burden": lambda a: a["burden"].get("energy_burden_all") or 0,
          "renter_burden": lambda a: a["burden"].get("energy_burden_renter") or 0}
@@ -51,6 +67,13 @@ def create_app(data_dir: Path = DATA_DIR) -> FastAPI:
     income = load_income(data_dir)
     layers = load_layers(data_dir)
     tariffs = {t["id"]: t for t in load_tariffs(data_dir)}
+    tracts = layers.get("tracts", [])
+
+    @cache
+    def map_geometry() -> dict | None:
+        shapes = load_tract_shapes(data_dir)
+        return tract_map(shapes, explore.LANDMARKS) if shapes else None
+
     app = FastAPI(title="UtilityTrack")
     app.mount("/static", StaticFiles(directory=WEB_DIR / "static"), name="static")
 
@@ -118,9 +141,16 @@ def create_app(data_dir: Path = DATA_DIR) -> FastAPI:
     def explore_index(request: Request):
         t = next(iter(tariffs.values()), None)
         upcoming = [u for u in explore.next_decisions(store, date.today()) if u["projected"]]
+        latest = next((a for a in reversed(explore.increase_actions(store)) if a["utility"] == "OPPD"), None)
         return TEMPLATES.TemplateResponse(request, "explore/index.html", {
             "t": t, "small_big": [explore.bill_parts(t, u, 1) for u in (300, 1500)] if t else None,
-            "upcoming": min(upcoming, key=lambda u: u["projected"], default=None)})
+            "upcoming": min(upcoming, key=lambda u: u["projected"], default=None),
+            "tracts": tracts, "has_map": bool(tracts) and map_geometry() is not None,
+            "map_rows": explore.map_rows(tracts),
+            "points": explore.cost_income_points(tracts),
+            "increase": {"a": latest, "groups": explore.increase_by_group(tracts, latest)}
+                        if tracts and latest else None,
+            "line": explore.under_the_line(tracts) if tracts else None})
 
     @app.get("/explore/fixed-charge", response_class=HTMLResponse)
     def explore_fixed_charge(request: Request, tariff: str | None = None):
@@ -135,6 +165,35 @@ def create_app(data_dir: Path = DATA_DIR) -> FastAPI:
         today = date.today()
         return TEMPLATES.TemplateResponse(request, "explore/next.html", {
             "today": today, "utilities": explore.next_decisions(store, today), "store": store})
+
+    @app.get("/explore/map", response_class=HTMLResponse)
+    def explore_map(request: Request):
+        return TEMPLATES.TemplateResponse(request, "explore/map.html", {
+            "geo": map_geometry() if tracts else None, "rows": explore.map_rows(tracts),
+            "metrics": explore.MAP_METRICS})
+
+    @app.get("/explore/cost-vs-income", response_class=HTMLResponse)
+    def explore_cost_income(request: Request):
+        points = explore.cost_income_points(tracts)
+        return TEMPLATES.TemplateResponse(request, "explore/cost_income.html", {
+            "points": points, "chart": scatter_scale(points) if points else None,
+            "cost_spread": explore.spread([p["cost"] for p in points]) if points else None,
+            "income_spread": explore.spread([p["income"]["all"] for p in points if p["income"]["all"]])
+                             if points else None})
+
+    @app.get("/explore/increase", response_class=HTMLResponse)
+    def explore_increase(request: Request, action: str | None = None):
+        actions = explore.increase_actions(store)
+        a = next((x for x in actions if x["id"] == action), None) or \
+            next((x for x in reversed(actions) if x["utility"] == "OPPD"), None)
+        return TEMPLATES.TemplateResponse(request, "explore/increase.html", {
+            "actions": actions, "a": a, "tracts": tracts,
+            "groups": explore.increase_by_group(tracts, a) if tracts and a else []})
+
+    @app.get("/explore/six-percent-line", response_class=HTMLResponse)
+    def explore_line(request: Request):
+        return TEMPLATES.TemplateResponse(request, "explore/line.html", {
+            "r": explore.under_the_line(tracts) if tracts else None})
 
     # ---- JSON API ------------------------------------------------------
     @app.get("/api/utilities")

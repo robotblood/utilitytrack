@@ -1,0 +1,115 @@
+{% extends "explore/layout.html" %}
+{% block title %}Burden map · UtilityTrack{% endblock %}
+{% block crumb %} · Burden map{% endblock %}
+{% macro pct(v) %}{{ "%.1f%%"|format(v * 100) if v is not none else "–" }}{% endmacro %}
+{% block page %}
+<h1>Where the burden falls</h1>
+{% if not rows %}
+<p class="muted">No tract profiles yet. Run <code>python -m rate_tracker acs-profiles --year 2024</code>, then restart.</p>
+{% elif not geo %}
+<p class="muted">No tract boundaries yet. Put <code>cb_2024_31_tract_500k.zip</code> from
+  <a href="https://www2.census.gov/geo/tiger/GENZ2024/shp/">census.gov</a> in <code>data/geo/</code>, then restart.</p>
+{% else %}
+{% set n = rows|length %}
+{% set over = rows|selectattr("vals.burden")|selectattr("vals.burden", "gt", 0.06)|list|length %}
+{% set renter_known = rows|selectattr("vals.renter")|list %}
+{% set renter_over = renter_known|selectattr("vals.renter", "gt", 0.06)|list|length %}
+{% set rent_big = rows|selectattr("vals.in_rent")|selectattr("vals.in_rent", "gt", 0.30)|list|length %}
+<p class="lede">Energy burden is the typical electricity and gas bill as a share of the typical income.
+  Measured for all households, {{ over }} of {{ n }} tracts in Douglas and Sarpy pass 6%.
+  Measured against renters' income, {{ renter_over }} of {{ renter_known|length }} do.</p>
+
+<div data-metric="burden" id="metric-scope">
+<form class="controls" onsubmit="return false">
+  <span class="seg" role="radiogroup" aria-label="Map shows">
+    {% for key, m in metrics.items() %}
+    <label><input type="radio" name="metric" value="{{ key }}"{% if loop.first %} checked{% endif %}>
+      {{ m.label }}{% if key != "in_rent" %} <span class="muted">· {{ m.who }}</span>{% endif %}</label>
+    {% endfor %}
+  </span>
+</form>
+
+{% for key, m in metrics.items() %}
+<div class="for-metric for-{{ key }}">
+  <div class="scale" aria-label="Map key">
+    {% set b = m.breaks %}
+    {% for i in range(b|length + 1) %}
+    <span data-c="{{ i }}"><i></i>{% if i == 0 %}up to {{ pct(b[0]) }}{% elif i == b|length %}over {{ pct(b[-1]) }}{% else %}{{ pct(b[i-1]) }}–{{ pct(b[i]) }}{% endif %}</span>
+    {% endfor %}
+    <span data-c="" class="nodata"><i></i>no data</span>
+  </div>
+  <p class="note">{% if key == "burden" %}Above 6% is a high burden, above 10% severe. Both maps use the same scale.
+    {% elif key == "renter" %}Same bill, renters' income: ACS does not split energy cost by tenure, so this shows the
+    income side of the gap, not how much renters use. {{ n - renter_known|length }} tracts have too few renters to estimate.
+    {% else %}Households whose electricity is included in rent or fees. They pay it, but it never appears as a bill,
+    so bill-based assistance and shutoff data miss them. {{ rent_big }} tracts are above 30%.{% endif %}</p>
+</div>
+{% endfor %}
+
+<svg id="map" class="chart map" viewBox="0 0 {{ geo.width }} {{ geo.height }}" role="img"
+     aria-label="Map of census tracts in Douglas and Sarpy counties, shaded by the selected measure">
+  {% for r in rows %}{% if r.geoid in geo.tracts %}
+  <path class="tract" data-g="{{ r.geoid }}" d="{{ geo.tracts[r.geoid] }}" fill-rule="evenodd"/>
+  {% endif %}{% endfor %}
+  {% for c in geo.counties %}<path class="county" d="{{ c.d }}" fill-rule="evenodd"/>{% endfor %}
+  {% for p in geo.landmarks %}
+  <circle class="place" cx="{{ p.x }}" cy="{{ p.y }}" r="2.5"/>
+  <text class="place" x="{{ p.x + 6 }}" y="{{ p.y + 4 }}">{{ p.name }}</text>
+  {% endfor %}
+</svg>
+</div>
+<p class="note">Big tracts in the west are mostly farmland and new subdivisions with few households; the dense
+  tracts east of 72nd Street hold most of the people. Hover a tract for its numbers.
+  {{ rows|selectattr("floor")|list|length }} tracts have a gas bill in ACS's top bin ("$150 or more"), so their
+  burden is a floor and likely higher.</p>
+
+<details class="table-view"><summary>Table view</summary>
+<div class="scroll"><table>
+  <tr><th>Tract</th><th class="num">Households</th><th class="num">Median income</th><th class="num">Energy $/mo</th>
+    <th class="num">Burden</th><th class="num">Renter burden</th><th class="num">Elec. in rent</th></tr>
+  {% for r in rows|sort(attribute="vals.burden", reverse=true) %}
+  <tr><td>{{ r.name }}</td><td class="num">{{ "{:,.0f}".format(r.households or 0) }}</td>
+    <td class="num">{{ "${:,.0f}".format(r.income) if r.income else "–" }}</td>
+    <td class="num">{{ "{}${:,.0f}".format("≥" if r.floor else "", r.cost) if r.cost is not none else "–" }}</td>
+    <td class="num">{{ "≥" if r.floor }}{{ pct(r["vals"].burden) }}</td><td class="num">{{ pct(r["vals"].renter) }}</td>
+    <td class="num">{{ pct(r["vals"].in_rent) }}</td></tr>
+  {% endfor %}
+</table></div>
+</details>
+<script type="application/json" id="rows">{{ rows|tojson }}</script>
+{% endif %}
+{% endblock %}
+{% block scripts %}{% if geo and rows %}
+<script>
+(() => {
+  const rows = Object.fromEntries(JSON.parse(document.getElementById("rows").textContent).map((r) => [r.geoid, r]));
+  const scope = document.getElementById("metric-scope"), svg = document.getElementById("map");
+  const paths = svg.querySelectorAll("path.tract");
+  const metric = () => document.querySelector("input[name=metric]:checked").value;
+  function paint() {
+    const m = metric();
+    scope.dataset.metric = m;
+    for (const p of paths) { const c = rows[p.dataset.g].classes[m]; p.dataset.c = c == null ? "" : c; }
+  }
+  document.querySelectorAll("input[name=metric]").forEach((el) => el.addEventListener("change", paint));
+  let on = null;
+  svg.addEventListener("pointermove", (e) => {
+    const p = e.target.closest("path.tract");
+    if (on && on !== p) on.classList.remove("on");
+    if (!p) { tip.hide(); on = null; return; }
+    on = p; p.classList.add("on");
+    p.parentNode.insertBefore(p, svg.querySelector("path.county"));  // lift the outline above its neighbors
+    const r = rows[p.dataset.g], floor = r.floor ? "≥ " : "";
+    tip.show(e.clientX, e.clientY, r.name, [
+      [floor + fmt.pct(r.vals.burden), "energy burden, all households"],
+      [floor + fmt.pct(r.vals.renter), "for renters"],
+      [fmt.pct(r.vals.in_rent, 0), "electricity paid through rent"],
+      [`${floor}${fmt.money(r.cost)}/mo`, `energy bill · ${fmt.k(r.income)} median income`],
+      [fmt.pct(r.renter_share, 0), `renters, of ${Math.round(r.households).toLocaleString()} households`],
+    ]);
+  });
+  svg.addEventListener("pointerleave", () => { tip.hide(); on?.classList.remove("on"); on = null; });
+  paint();
+})();
+</script>
+{% endif %}{% endblock %}

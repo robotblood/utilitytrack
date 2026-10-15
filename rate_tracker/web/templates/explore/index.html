@@ -26,4 +26,52 @@
     <span class="meta">For: action. Points people at the meeting instead of the bill.</span>
   </a>
 </div>
+
+<h2 style="font-size:18px;margin-top:32px">Who carries it <span class="muted" style="font-weight:400">· new, from the {{ tracts|length }} census tracts</span></h2>
+{% if not tracts %}<p class="muted">Needs tract profiles: <code>python -m rate_tracker acs-profiles --year 2024</code>.</p>{% else %}
+<div class="gallery">
+  <a class="concept" href="/explore/map">
+    <span class="kicker">Tract map · toggle</span>
+    <h3>Where the burden falls</h3>
+    <p class="q">Which parts of the metro spend the biggest share of income on energy, and how does that change for renters?</p>
+    {% set over = map_rows|selectattr("vals.burden")|selectattr("vals.burden", "gt", 0.06)|list|length %}
+    {% set rover = map_rows|selectattr("vals.renter")|selectattr("vals.renter", "gt", 0.06)|list|length %}
+    <div class="peek peek-row"><div>all households<div class="big">{{ over }} tracts</div></div>
+      <div>renters<div class="big">{{ rover }} tracts</div></div><div class="muted" style="align-self:end">over 6%</div></div>
+    <span class="meta">For: where.{% if not has_map %} Needs tract boundaries in data/geo/.{% endif %}</span>
+  </a>
+
+  <a class="concept" href="/explore/cost-vs-income">
+    <span class="kicker">Scatter · toggle</span>
+    <h3>The bill barely moves. Income does.</h3>
+    <p class="q">Is energy burden about what people pay, or what they earn?</p>
+    {% set c = points|map(attribute="cost")|list %}
+    <div class="peek peek-row"><div>bill, low to high tract<div class="big">${{ "%.0f"|format(c|min) }}–${{ "%.0f"|format(c|max) }}</div></div>
+      {% set inc = points|map(attribute="income.all")|select|list %}
+      <div>per month<div class="muted">while income spans {{ "%.0f"|format(inc|max / inc|min) }}×</div></div></div>
+    <span class="meta">For: why. Moves the argument from usage to income.</span>
+  </a>
+
+  {% if increase %}{% set g = increase.groups %}
+  <a class="concept" href="/explore/increase">
+    <span class="kicker">Paired bars · pick a decision</span>
+    <h3>Same increase, different weight</h3>
+    <p class="q">What does one rate decision cost each part of town, in dollars and as a share of income?</p>
+    <div class="peek peek-row"><div>{{ increase.a.utility }} {{ increase.a.effective_date[:4] }}, poorest fifth<div class="big">{{ "%.2f%%"|format(g[0].share * 100) }}</div></div>
+      <div>richest fifth<div class="big">{{ "%.2f%%"|format(g[-1].share * 100) }}</div></div></div>
+    <span class="meta">For: the board. Joins the rate record to the tract data.</span>
+  </a>
+  {% endif %}
+
+  <a class="concept" href="/explore/six-percent-line">
+    <span class="kicker">Hero number · stacked bars</span>
+    <h3>Households under the 6% line</h3>
+    <p class="q">How many households earn too little for the typical local bill to stay under 6%?</p>
+    <div class="peek"><div class="big">~{{ "{:,.0f}".format((line.all.under_6 / 1000)|round * 1000) }}</div>
+      {{ "%.0f%%"|format(line.tenure.renter.under_6 / line.tenure.renter.households * 100) }} of renters,
+      {{ "%.0f%%"|format(line.tenure.owner.under_6 / line.tenure.owner.households * 100) }} of owners</div>
+    <span class="meta">For: scale. Counts households instead of averaging tracts.</span>
+  </a>
+</div>
+{% endif %}
 {% endblock %}
