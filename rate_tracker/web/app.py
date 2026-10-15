@@ -1,18 +1,25 @@
 """FastAPI app over the JSON store. Read-only for now; JSON stays the source of truth."""
 import json
 import time
+from datetime import date
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
+from .. import explore
 from ..bills import load_tariffs, monthly_bill, observed_burden
 from ..log import get_logger
 from ..store import DATA_DIR, Store
+from .charts import usage_chart
 
 log = get_logger()
-TEMPLATES = Jinja2Templates(directory=Path(__file__).resolve().parent / "templates")
+WEB_DIR = Path(__file__).resolve().parent
+TEMPLATES = Jinja2Templates(directory=WEB_DIR / "templates")
+TEMPLATES.env.globals.update(headline=explore.headline_change, domain=explore.domain)
+USAGES = list(range(100, 2501, 50))
 INCOME_FILE = "geo_income_tracts.json"
 
 
@@ -45,6 +52,7 @@ def create_app(data_dir: Path = DATA_DIR) -> FastAPI:
     layers = load_layers(data_dir)
     tariffs = {t["id"]: t for t in load_tariffs(data_dir)}
     app = FastAPI(title="UtilityTrack")
+    app.mount("/static", StaticFiles(directory=WEB_DIR / "static"), name="static")
 
     @app.middleware("http")
     async def log_requests(request: Request, call_next):
@@ -104,6 +112,29 @@ def create_app(data_dir: Path = DATA_DIR) -> FastAPI:
         return TEMPLATES.TemplateResponse(request, "bill.html", {
             "tariffs": list(tariffs.values()), "t": t, "bill": bill, "usage": usage, "month": month,
             "income": income, "share": share})
+
+    # ---- explore: the same data shown another way ----------------------
+    @app.get("/explore", response_class=HTMLResponse)
+    def explore_index(request: Request):
+        t = next(iter(tariffs.values()), None)
+        upcoming = [u for u in explore.next_decisions(store, date.today()) if u["projected"]]
+        return TEMPLATES.TemplateResponse(request, "explore/index.html", {
+            "t": t, "small_big": [explore.bill_parts(t, u, 1) for u in (300, 1500)] if t else None,
+            "upcoming": min(upcoming, key=lambda u: u["projected"], default=None)})
+
+    @app.get("/explore/fixed-charge", response_class=HTMLResponse)
+    def explore_fixed_charge(request: Request, tariff: str | None = None):
+        t = tariffs.get(tariff) or next(iter(tariffs.values()), None)
+        curves = explore.usage_curves(t, USAGES) if t else None
+        return TEMPLATES.TemplateResponse(request, "explore/fixed_charge.html", {
+            "t": t, "tariffs": list(tariffs.values()), "curves": curves,
+            "chart": usage_chart(curves, USAGES) if curves else None})
+
+    @app.get("/explore/next", response_class=HTMLResponse)
+    def explore_next(request: Request):
+        today = date.today()
+        return TEMPLATES.TemplateResponse(request, "explore/next.html", {
+            "today": today, "utilities": explore.next_decisions(store, today), "store": store})
 
     # ---- JSON API ------------------------------------------------------
     @app.get("/api/utilities")

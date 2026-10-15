@@ -51,6 +51,12 @@ class WebTests(unittest.TestCase):
         self.assertEqual(self.client.get("/api/bill/oppd-rate-110-2026",
                                          params={"usage": 1, "month": 13}).status_code, 422)
 
+    def test_explore_pages(self):
+        for path in ("/explore", "/explore/fixed-charge", "/explore/next", "/static/explore.css"):
+            self.assertEqual(self.client.get(path).status_code, 200, path)
+        self.assertIn("minimum bill", self.client.get("/explore/fixed-charge").text)
+        self.assertIn("third Thursday of December", self.client.get("/explore/next").text)
+
     def test_income_page_without_data(self):
         r = self.client.get("/income")
         self.assertEqual(r.status_code, 200)

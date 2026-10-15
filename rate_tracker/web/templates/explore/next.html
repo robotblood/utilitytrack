@@ -1,0 +1,55 @@
+{% extends "explore/layout.html" %}
+{% block title %}Next decision · UtilityTrack{% endblock %}
+{% block crumb %} · Next decision{% endblock %}
+{% block page %}
+{% set phases = [("Nov", "Proposal presented", [11]), ("Dec", "Board votes", [12]),
+                 ("Jan", "New rates take effect", [1]), ("Feb–Oct", "It shows up on bills", [2,3,4,5,6,7,8,9,10])] %}
+<h1>When the next decision gets made</h1>
+<p class="lede">Fuel prices and storms push costs around, but the rates themselves are set by two elected boards, on a calendar
+  that barely moves. The time to weigh in is before the vote, not when the bill arrives.</p>
+
+<div class="cycle" aria-label="The yearly rate cycle">
+  {% for short, what, months in phases %}
+  <div class="{{ 'now' if today.month in months else '' }}"><b>{{ short }}</b>{{ what }}{% if today.month in months %} <span class="muted">· now</span>{% endif %}</div>
+  {% endfor %}
+</div>
+<p class="note">Both utilities typically present next year's proposal in November. Vote dates below are projected from
+  past votes, not announced; check the board calendars before planning around them.</p>
+
+<div class="decisions">
+  {% for u in utilities %}{% set p = u.pattern %}
+  <section class="decision">
+    <div class="kicker">{{ u.utility.code }} board · {{ u.utility.services|join(" + ") }}</div>
+    {% if u.projected %}
+    <div class="when">{{ u.projected.strftime("%a %b %-d, %Y") }}</div>
+    <div class="days">{{ u.days }} days away · expected vote on {{ u.projected.year + 1 }} rates</div>
+    <p class="note">Projected: every recorded vote fell on the {{ p.rule.text }}
+      ({{ p.votes|map(attribute="date")|map(attribute="year")|join(", ") }}).</p>
+    {% else %}
+    <div class="when muted">Date unknown</div>
+    <p class="note">{{ p.votes|length }} recorded vote{{ "" if p.votes|length == 1 else "s" }}; not enough to project the next one.
+      Adding <code>approved_date</code> to past actions fixes this.</p>
+    {% endif %}
+
+    <ul class="votes">
+      {% for v in p.votes|reverse %}
+      <li><span class="muted">{{ v.date.strftime("%b %-d, %Y") }}</span>
+        <span>{% for a in v.actions %}{% set h = headline(a) %}<a href="/actions/{{ a.id }}">{{ a.service }} {{ a.effective_date[:4] }}</a>
+          {% if h %}{{ "%+.1f%%"|format(h.value) }}{% endif %}{{ ", " if not loop.last }}{% endfor %}</span></li>
+      {% endfor %}
+    </ul>
+
+    <p><strong>Last time</strong>
+      {% for a in u.latest %}{% set h = a.headline %}
+      · {{ a.service }} {{ a.effective_date[:4] }}: {% if h %}{{ "%+.1f%%"|format(h.value) }} {{ h.label }}{% else %}no headline figure{% endif %}
+      {% endfor %}</p>
+    <ul>
+      {% for did in u.latest|map(attribute="driver_ids")|sum(start=[])|unique %}{% set d = store.driver(did) %}
+      <li class="{{ d.direction }}">{{ "▲" if d.direction == "up" else "▼" }} <span style="color:var(--fg)">{{ d.title }}</span></li>
+      {% endfor %}
+    </ul>
+    <p class="note">Rate pages: {% for s in u.utility.rate_pages or [] %}<a href="{{ s }}" rel="noopener">{{ s.replace("https://", "").replace("www.", "").rstrip("/") }}</a> {% endfor %}</p>
+  </section>
+  {% endfor %}
+</div>
+{% endblock %}

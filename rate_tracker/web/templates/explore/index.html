@@ -1,0 +1,29 @@
+{% extends "explore/layout.html" %}
+{% block title %}Explore · UtilityTrack{% endblock %}
+{% block page %}
+<h1>Other ways to show it</h1>
+<p class="lede">The data pages answer "what is in the record." These pages each answer one question a household,
+  a reporter or a board member would actually ask, from the same JSON.</p>
+
+<div class="gallery">
+  <a class="concept" href="/explore/fixed-charge">
+    <span class="kicker">Usage curve · interactive</span>
+    <h3>Who pays the fixed charge</h3>
+    <p class="q">Does a small household pay more per {{ t.unit if t else "unit" }} than a big one?</p>
+    <div class="peek peek-row">{% if small_big %}{% for b in small_big %}
+      <div>{{ "{:,.0f}".format(b.usage) }} {{ t.unit }}/mo<div class="big">{{ "%.1f"|format(b.cents) }}¢</div></div>{% endfor %}
+      {% else %}<span class="muted">No tariff loaded.</span>{% endif %}</div>
+    <span class="meta">For: who carries it. Uses the one tariff loaded so far, which is flagged for verification.</span>
+  </a>
+
+  <a class="concept" href="/explore/next">
+    <span class="kicker">Civic calendar</span>
+    <h3>When the next decision gets made</h3>
+    <p class="q">When can someone still do something about next year's rates?</p>
+    <div class="peek">{% if upcoming %}<div class="big">{{ upcoming.days }} days</div>
+      to the {{ upcoming.utility.code }} vote expected {{ upcoming.projected.strftime("%b %-d") }} (projected from past votes)
+      {% else %}<span class="muted">No vote pattern yet.</span>{% endif %}</div>
+    <span class="meta">For: action. Points people at the meeting instead of the bill.</span>
+  </a>
+</div>
+{% endblock %}

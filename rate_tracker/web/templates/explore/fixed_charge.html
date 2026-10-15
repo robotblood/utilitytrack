@@ -1,0 +1,125 @@
+{% extends "explore/layout.html" %}
+{% block title %}Fixed charge · UtilityTrack{% endblock %}
+{% block crumb %} · Fixed charge{% endblock %}
+{% block page %}
+<h1>Who pays the fixed charge</h1>
+{% if not t %}
+<p class="muted">No tariffs loaded. Add them to <code>data/tariffs.json</code>.</p>
+{% else %}
+{% set fixed = t.fixed_monthly|sum(attribute="amount") %}
+<p class="lede">{{ t.utility }} {{ t.schedule }} starts every month at ${{ "%.2f"|format(fixed) }} before a single
+  {{ t.unit }} is used. Spread over a small month that is a large share; over a big month it nearly disappears.
+  So the less a household uses, the more it pays per {{ t.unit }}.</p>
+{% if t.verification != "verified" %}
+<div class="flagbar"><strong>This tariff needs verification, and the answer changes this chart.</strong>
+  It is not yet confirmed whether the ${{ "%.0f"|format(fixed) }} is a service charge added to every bill or a minimum
+  bill that only applies when usage is low. Both readings are drawn below; the gap between them is
+  ${{ "%.0f"|format(fixed) }} a month for anyone above the minimum.</div>
+{% endif %}
+
+<form class="controls" onsubmit="return false">
+  {% if tariffs|length > 1 %}<select name="tariff" onchange="location.search = '?tariff=' + this.value">
+    {% for x in tariffs %}<option value="{{ x.id }}"{% if x.id == t.id %} selected{% endif %}>{{ x.utility }} {{ x.schedule }}</option>{% endfor %}
+  </select>{% endif %}
+  <label>Usage <input id="usage" type="range" min="{{ chart.scale.u0 }}" max="{{ chart.scale.u1 }}" step="50" value="1000">
+    <output id="usage-out">1000</output> {{ t.unit }}/month</label>
+  <span class="seg" role="radiogroup" aria-label="Season">
+    {% for season, c in curves.items() %}
+    <label><input type="radio" name="season" value="{{ season }}"{% if loop.first %} checked{% endif %}>
+      {{ season.replace("_", "-") }} <span class="muted">(month {{ c.month }})</span></label>
+    {% endfor %}
+  </span>
+</form>
+
+<div class="readings">
+  {% for key, title in [("fixed_charge", "Read as a service charge"), ("minimum_bill", "Read as a minimum bill")] %}
+  <div class="reading" data-reading="{{ key }}">
+    <div class="label"><span class="key-line" style="--k: var({{ '--accent' if key == 'fixed_charge' else '--quiet' }})"></span>{{ title }}</div>
+    <div class="value"><span data-f="cents"></span>¢ <span class="muted" style="font-size:15px;font-weight:400">per {{ t.unit }}</span></div>
+    <div class="muted"><span data-f="total"></span> this month · <span data-f="share"></span> of it is fixed</div>
+    <div class="stack" aria-hidden="true"><span class="fixed"></span><span class="energy"></span><span class="riders"></span></div>
+  </div>
+  {% endfor %}
+</div>
+<div class="legend"><span><i style="background:var(--accent)"></i>fixed (paid regardless of use)</span>
+  <span><i style="background:var(--quiet)"></i>energy</span><span><i style="background:var(--axis)"></i>riders (FPPA)</span></div>
+
+<svg id="curve" class="chart season-{{ curves|first }}" viewBox="0 0 {{ chart.width }} {{ chart.height }}" role="img"
+     aria-label="Effective cents per {{ t.unit }} against monthly usage, under both readings of the fixed charge">
+  {% for tk in chart.yticks %}
+  <line class="{{ 'base' if tk.v == 0 else 'grid' }}" x1="{{ chart.left }}" x2="{{ chart.right }}" y1="{{ tk.y }}" y2="{{ tk.y }}"/>
+  <text x="{{ chart.left - 8 }}" y="{{ tk.y + 4 }}" text-anchor="end">{{ tk.v }}¢</text>
+  {% endfor %}
+  {% for tk in chart.xticks %}
+  <text x="{{ tk.x }}" y="{{ chart.bottom + 20 }}" text-anchor="middle">{{ "{:,}".format(tk.v) }}{% if loop.last %} {{ t.unit }}{% endif %}</text>
+  {% endfor %}
+  {% for season, p in chart.paths.items() %}
+  <g data-season="{{ season }}">
+    <path class="series reading-b" d="{{ p.minimum_bill }}"/>
+    <path class="series reading-a" d="{{ p.fixed_charge }}"/>
+  </g>
+  {% endfor %}
+  <line id="cursor" class="cursor" y1="{{ chart.top }}" y2="{{ chart.bottom }}"/>
+  <circle id="dot-a" class="mark" r="4.5" style="--k: var(--accent)"/>
+  <circle id="dot-b" class="mark" r="4.5" style="--k: var(--quiet)"/>
+  <rect class="hot" x="{{ chart.left }}" y="{{ chart.top }}" width="{{ chart.right - chart.left }}" height="{{ chart.bottom - chart.top }}" fill="transparent"/>
+</svg>
+<p class="note">Effective price = the whole monthly bill ÷ {{ t.unit }} used. Drag across the chart or use the slider.
+  Smaller homes and apartments tend to sit at the left of this curve.</p>
+
+<details class="table-view"><summary>Table view</summary>
+<div class="scroll"><table>
+  <tr><th>Season</th><th class="num">Usage</th><th class="num">Service charge: bill</th><th class="num">¢/{{ t.unit }}</th>
+    <th class="num">Minimum bill: bill</th><th class="num">¢/{{ t.unit }}</th></tr>
+  {% for season, c in curves.items() %}{% for i in range(c.fixed_charge|length) if c.fixed_charge[i].usage in (200, 500, 750, 1000, 1500, 2000) %}
+  {% set a, b = c.fixed_charge[i], c.minimum_bill[i] %}
+  <tr><td>{{ season.replace("_", "-") }}</td><td class="num">{{ "{:,.0f}".format(a.usage) }}</td>
+    <td class="num">${{ "%.2f"|format(a.total) }}</td><td class="num">{{ "%.1f"|format(a.cents) }}</td>
+    <td class="num">${{ "%.2f"|format(b.total) }}</td><td class="num">{{ "%.1f"|format(b.cents) }}</td></tr>
+  {% endfor %}{% endfor %}
+</table></div>
+</details>
+<p class="note">{{ t.notes }}</p>
+<p class="note">Sources: {% for s in t.sources %}<a href="{{ s }}" rel="noopener">{{ domain(s) }}</a> {% endfor %}</p>
+
+<script type="application/json" id="curves">{{ {"curves": curves, "scale": chart.scale}|tojson }}</script>
+<script>
+(() => {
+  const { curves, scale } = JSON.parse(document.getElementById("curves").textContent);
+  const svg = document.getElementById("curve"), slider = document.getElementById("usage");
+  const x = (u) => scale.x0 + (u - scale.u0) / (scale.u1 - scale.u0) * (scale.x1 - scale.x0);
+  const y = (c) => scale.y0 + (scale.hi - c) / scale.hi * (scale.y1 - scale.y0);
+  const money = (v) => `$${v.toFixed(2)}`;
+  const season = () => document.querySelector("input[name=season]:checked").value;
+
+  function render() {
+    const u = +slider.value, s = season(), i = Math.round((u - scale.u0) / 50);
+    svg.setAttribute("class", `chart season-${s}`);
+    document.getElementById("usage-out").textContent = u.toLocaleString();
+    const cx = x(u);
+    for (const id of ["cursor"]) { const l = document.getElementById(id); l.setAttribute("x1", cx); l.setAttribute("x2", cx); }
+    for (const [key, dot] of [["fixed_charge", "dot-a"], ["minimum_bill", "dot-b"]]) {
+      const r = curves[s][key][i], d = document.getElementById(dot);
+      d.setAttribute("cx", cx); d.setAttribute("cy", y(r.cents));
+      const box = document.querySelector(`[data-reading=${key}]`);
+      box.querySelector("[data-f=cents]").textContent = r.cents.toFixed(1);
+      box.querySelector("[data-f=total]").textContent = money(r.total);
+      box.querySelector("[data-f=share]").textContent = `${Math.round(r.fixed / r.total * 100)}%`;
+      const [f, e, k] = box.querySelectorAll(".stack span");
+      f.style.flex = r.fixed; e.style.flex = r.energy; k.style.flex = r.riders;
+      f.style.display = r.fixed > 0 ? "" : "none";
+    }
+  }
+  slider.addEventListener("input", render);
+  document.querySelectorAll("input[name=season]").forEach((el) => el.addEventListener("change", render));
+  svg.addEventListener("pointermove", (e) => {
+    const pt = new DOMPoint(e.clientX, e.clientY).matrixTransform(svg.getScreenCTM().inverse());
+    const u = scale.u0 + (pt.x - scale.x0) / (scale.x1 - scale.x0) * (scale.u1 - scale.u0);
+    slider.value = Math.max(scale.u0, Math.min(scale.u1, Math.round(u / 50) * 50));
+    render();
+  });
+  render();
+})();
+</script>
+{% endif %}
+{% endblock %}
